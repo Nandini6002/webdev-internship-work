@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f3e7e9, #e3eeff);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: #fff;
+      padding: 40px 30px;
+      border-radius: 20px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+      width: 350px;
+      text-align: center;
+    }
+
+    h2 {
+      margin-bottom: 25px;
+      color: #333;
+    }
+
+    input {
+      width: 90%;
+      padding: 12px;
+      margin: 12px 0;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      outline: none;
+      transition: 0.3s ease;
+    }
+
+    input:focus {
+      border-color: #007bff;
+      box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+    }
+
+    button {
+      padding: 12px;
+      width: 100%;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .google-login {
+      margin: 20px 0;
+    }
+
+    p {
+      font-size: 14px;
+      color: #555;
+    }
+
+    a {
+      color: #007bff;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .forgot {
+      display: block;
+      margin-top: -8px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      text-align: right;
+      color: #007bff;
+    }
+
+    .forgot:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Login</h2>
+    <form id="loginForm">
+      <input type="text" name="username" placeholder="Username" required />
+      <input type="password" name="password" placeholder="Password" required />
+      <a href="reset-password.html" class="forgot">Forgot Password?</a>
+      <button type="submit">Login</button>
+    </form>
+
+    <div class="google-login">
+      <div id="g_id_onload"
+           data-client_id="1098954270730-h92guqetn0m1rfh99vi9s3b842h0jafo.apps.googleusercontent.com"
+           data-callback="handleCredentialResponse"
+           data-ux_mode="popup">
+      </div>
+      <div class="g_id_signin" data-type="standard"></div>
+    </div>
+
+    <p>Don't have an account? <a href="register.html">Register</a></p>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').onsubmit = async function (e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const body = Object.fromEntries(formData.entries());
+
+      const res = await fetch('http://localhost:3001/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      alert(data.message);
+      if (res.ok && data.username) {
+        sessionStorage.setItem('username', data.username);
+        window.location.href = 'homepage.html';
+      }
+    };
+
+    function handleCredentialResponse(response) {
+      fetch('http://localhost:3001/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+        if (data.success && data.username) {
+          sessionStorage.setItem('username', data.username);
+          window.location.href = 'homepage.html';
+        }
+      })
+      .catch(err => {
+        alert("Google login failed.");
+        console.error(err);
+      });
+    }
+  </script>
+</body>
+</html>
+

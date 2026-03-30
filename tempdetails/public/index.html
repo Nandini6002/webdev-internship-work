@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html ng-app="myApp">
+<head>
+  <meta charset="utf-8">
+  <title>Stock Result Viewer (Plotly.js)</title>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f8;
+    }
+    .section {
+      padding: 20px;
+    }
+    input, button {
+      padding: 6px 10px;
+      margin: 4px;
+      font-size: 14px;
+    }
+    button {
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background-color: white;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+      font-size: 13px;
+    }
+    tr:nth-child(odd) { background-color: #f9f9f9; }
+    #stockPlot {
+      width: 100%;
+      height: 500px;
+      margin-top: 20px;
+      background-color: white;
+    }
+    .nav-buttons {
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body ng-controller="stockCtrl">
+
+  <div class="section">
+    <h2>📈 Stock Result Viewer</h2>
+    <label>Ticker:</label>
+    <input type="text" ng-model="form.ticker" list="tickerList" placeholder="e.g. TCS">
+    <datalist id="tickerList">
+      <option ng-repeat="t in tickers" value="{{ t }}"></option>
+    </datalist>
+
+    <label>Date:</label>
+    <input type="date" ng-model="form.date">
+    <button ng-click="fetch()">Search</button>
+
+    <div class="nav-buttons" ng-if="searched && records.length">
+      <button ng-click="goToTable()">View Table</button>
+      <button ng-click="showChart()">View Chart</button>
+    </div>
+
+    <div ng-if="searched && records.length === 0">No data found.</div>
+
+    <div ng-if="records.length && page === 'table'">
+      <h3>📋 Full Data Table</h3>
+      <table>
+        <tr>
+          <th>ticker</th><th>date</th><th>time</th><th>open</th><th>high</th><th>low</th><th>close</th>
+        </tr>
+        <tr ng-repeat="row in records">
+          <td>{{ row.ticker }}</td>
+          <td>{{ row.date | date:'yyyy-MM-dd' }}</td>
+          <td>{{ row.time }}</td>
+          <td>{{ row.open }}</td>
+          <td>{{ row.high }}</td>
+          <td>{{ row.low }}</td>
+          <td>{{ row.close }}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div ng-if="records.length && page === 'chart'">
+      <div id="stockPlot"></div>
+    </div>
+  </div>
+
+  <script>
+    angular.module('myApp', [])
+      .controller('stockCtrl', function ($scope, $http) {
+        $scope.form = { ticker: '', date: '' };
+        $scope.records = [];
+        $scope.tickers = [];
+        $scope.searched = false;
+        $scope.page = 'table';
+
+        $http.get('/tickers').then(res => {
+          $scope.tickers = res.data.tickers || [];
+        });
+
+        $scope.fetch = function () {
+          if (!$scope.form.ticker || !$scope.form.date) {
+            alert("Please enter both ticker and date.");
+            return;
+          }
+
+          const d = new Date($scope.form.date);
+          const formattedDate = d.getFullYear() + '-' +
+            String(d.getMonth() + 1).padStart(2, '0') + '-' +
+            String(d.getDate()).padStart(2, '0');
+
+          const params = new URLSearchParams({
+            ticker: $scope.form.ticker,
+            date: formattedDate
+          });
+
+          $http.get('/stock_results?' + params.toString())
+            .then(res => {
+              $scope.records = res.data.records || [];
+              $scope.searched = true;
+              $scope.page = 'table';
+              $scope.form.ticker = '';
+              $scope.form.date = '';
+            });
+        };
+
+        $scope.goToTable = function () {
+          $scope.page = 'table';
+          Plotly.purge('stockPlot');
+        };
+
+        $scope.showChart = function () {
+          $scope.page = 'chart';
+          setTimeout(drawPlot, 200);
+        };
+
+        function drawPlot() {
+          const sorted = [...$scope.records].sort((a, b) => a.time.localeCompare(b.time));
+          const labels = sorted.map(r => r.time);
+          const first930 = sorted.find(r => r.time === '09:30:00');
+          if (!first930) {
+            alert('9:30:00 open price not found.');
+            return;
+          }
+
+          const openPrice = parseFloat(first930.open);
+          const maxHigh = Math.max(...sorted.map(r => parseFloat(r.high)));
+          const minLow = Math.min(...sorted.map(r => parseFloat(r.low)));
+
+          const maxPerc = ((maxHigh - openPrice) / openPrice) * 100;
+          const minPerc = ((minLow - openPrice) / openPrice) * 100;
+
+          const upperBound = Math.ceil(maxPerc / 0.5) * 0.5;
+          const lowerBound = Math.floor(minPerc / 0.5) * 0.5;
+
+          const percLines = [];
+          const annotations = [];
+
+          for (let perc = upperBound; perc >= lowerBound; perc -= 0.5) {
+            const priceY = openPrice + (perc * openPrice) / 100;
+            const investPerc = (perc / 5).toFixed(2);
+
+            percLines.push({
+              x: [labels[0], labels[labels.length - 1]],
+              y: [priceY, priceY],
+              mode: 'lines',
+              line: { color: '#bbbbbb', width: 1, dash: 'dot' },
+              hoverinfo: 'skip',
+              showlegend: false
+            });
+
+            annotations.push(
+              {
+                x: labels[0],
+                y: priceY,
+                xanchor: 'right',
+                xshift: -45,
+                text: perc.toFixed(1) + '%',
+                showarrow: false,
+                font: { size: 11, color: 'black' }
+              },
+              {
+                x: labels[labels.length - 1],
+                y: priceY,
+                xanchor: 'left',
+                xshift: 45,
+                text: investPerc + '%',
+                showarrow: false,
+                font: { size: 11, color: 'black' }
+              }
+            );
+          }
+
+          const traces = [
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.low)),
+              name: 'low',
+              mode: 'lines+markers',
+              line: { color: '#9467bd', width: 2 }
+            },
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.high)),
+              name: 'high',
+              mode: 'lines+markers',
+              fill: 'tonexty',
+              fillcolor: 'rgba(173,216,230,0.3)',
+              line: { color: '#ff7f0e', width: 2 }
+            },
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.hlby2)),
+              name: 'hlby2',
+              mode: 'lines+markers',
+              line: { color: '#1f77b4', dash: 'dash', width: 2 }
+            },
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.cum_hlby2)),
+              name: 'cum_hlby2',
+              mode: 'lines+markers',
+              line: { color: '#2ca02c', width: 2 }
+            },
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.filt_cum_hlby2)),
+              name: 'filt_cum_hlby2',
+              mode: 'lines+markers',
+              line: { color: '#d62728', width: 2 }
+            },
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.MaxHighTillTime)),
+              name: 'MaxHighTillTime',
+              mode: 'lines',
+              line: { color: '#17becf', dash: 'dot', width: 2 }
+            },
+            {
+              x: labels,
+              y: sorted.map(r => parseFloat(r.MinLowTillTime)),
+              name: 'MinLowTillTime',
+              mode: 'lines',
+              line: { color: '#8c564b', dash: 'dot', width: 2 }
+            },
+            // ...percLines
+          ];
+
+          const layout = {
+            title: '',
+            xaxis: {
+              title: {
+                text: 'Time',
+                standoff: 20
+              },
+              tickangle: -45,
+              tickfont: {
+                size: 11
+              },
+              automargin: true,
+              showgrid: true
+            },
+            yaxis: {
+              title: 'Price',
+              showgrid: true,
+              automargin: true
+            },
+            annotations: annotations,
+            legend: {
+              orientation: 'h',
+              x: 0,
+              y: 1.15,
+              xanchor: 'left',
+              font: { size: 12 }
+            },
+            margin: { l: 60, r: 60, t: 60, b: 80 },
+            plot_bgcolor: '#fff',
+            paper_bgcolor: '#fff'
+          };
+
+          Plotly.newPlot('stockPlot', traces, layout, { responsive: true });
+        }
+      });
+  </script>
+</body>
+</html>

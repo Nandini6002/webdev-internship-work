@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(to right, #e3f2fd, #fff);
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .container {
+      background: white;
+      padding: 40px 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      color: #007bff;
+    }
+
+    input {
+      width: 90%;
+      padding: 12px;
+      margin: 12px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #28a745;
+      color: white;
+      padding: 12px;
+      width: 100%;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      margin-top: 10px;
+      transition: background-color 0.3s ease;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #218838;
+    }
+
+    p {
+      margin-top: 20px;
+      font-size: 14px;
+    }
+
+    a {
+      color: #007bff;
+      font-weight: bold;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Register</h2>
+    <form id="registerForm">
+      <input type="text" name="username" placeholder="Username" required />
+      <input type="email" name="email" placeholder="Email" required />
+      <input type="password" name="password" placeholder="Password" required />
+      <input type="password" name="confirmPassword" placeholder="Confirm Password" required />
+      <button type="submit">Register</button>
+    </form>
+
+    <p>Already have an account? <a href="login.html">Login</a></p>
+  </div>
+
+  <script>
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const abstractApiKey = 'f5a29353bf9243d583698f7f219394eb'; // ✅ Your Abstract API Key
+
+    document.getElementById('registerForm').onsubmit = async function (e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const body = Object.fromEntries(formData.entries());
+
+      if (!emailRegex.test(body.email)) {
+        alert("❌ Invalid email format!");
+        return;
+      }
+
+      try {
+        const verifyRes = await fetch(`https://emailvalidation.abstractapi.com/v1/?api_key=${abstractApiKey}&email=${body.email}`);
+        const verifyData = await verifyRes.json();
+        console.log("Email check:", verifyData); // 🔍 Inspect this in DevTools
+
+        if (verifyData.deliverability === "UNDELIVERABLE") {
+          alert("❌ This email cannot receive messages.");
+          return;
+        }
+
+        // 🚫 Disposable check temporarily disabled due to false positive:
+        // if (verifyData.is_disposable_email) {
+        //   alert("❌ Disposable email addresses are not allowed.");
+        //   return;
+        // }
+
+      } catch (err) {
+        alert("⚠️ Failed to verify email. Please try again later.");
+        return;
+      }
+
+      if (body.password !== body.confirmPassword) {
+        alert("❌ Passwords do not match!");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+        alert(data.message);
+        if (res.ok) window.location.href = 'login.html';
+      } catch (err) {
+        alert('❌ Failed to register. Try again.');
+      }
+    };
+  </script>
+</body>
+</html>
